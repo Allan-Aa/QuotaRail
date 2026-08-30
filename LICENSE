@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2026 Claude Bar contributors
+Modifications Copyright (c) 2026 QuotaRail contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +23,7 @@ SOFTWARE.
 
 ---
 
-This project bundles provider mark artwork (Sources/ClaudeBar/Resources/Brand/)
+This project bundles provider mark artwork (Sources/QuotaRail/Resources/Brand/)
 derived from lobehub/lobe-icons (MIT License, Copyright (c) 2023 LobeHub).
 Those marks remain trademarks of their respective owners (Anthropic, OpenAI,
-Google); this project is not affiliated with or endorsed by any of them.
+Cursor); this project is not affiliated with or endorsed by any of them.

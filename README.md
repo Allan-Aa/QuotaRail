@@ -1,114 +1,64 @@
-<div align="center">
+# QuotaRail
 
-# 🎚️ Throttle
+[![MIT License](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-111111.svg)](#build-and-check--构建与检查)
 
-**Your Claude, Codex, and Gemini usage — live, in your menu bar, with none of the guessing.**
+[Download the latest release](https://github.com/Allan-Aa/QuotaRail/releases/latest) · [Changelog](CHANGELOG.md)
 
-[![Platform](https://img.shields.io/badge/platform-macOS%2011%2B-black?style=flat-square&logo=apple&logoColor=white)](#install)
-[![Universal](https://img.shields.io/badge/binary-Apple%20Silicon%20%2B%20Intel-black?style=flat-square)](#install)
-[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#license)
+QuotaRail is a native macOS usage rail for Claude, Codex, Grok, and Cursor. It sits on the right edge of the active display, collapses to a small tab when not set to stay visible, and expands into a Dock-style usage rail.
 
-<img src="docs/screenshot.png" alt="Throttle showing a detail panel with real Claude, Codex, and Gemini usage, next to the floating ring pill" width="720">
+QuotaRail 是一个原生 macOS 侧边额度栏，用来显示 Claude、Codex、Grok 和 Cursor 的可读取用量。它由固定的 rail window（负责鼠标命中和图标）与独立的 overlay window（负责 hover 标签和点击后的详情卡片）组成；hover 不会再通过改变 rail 窗口宽度实现。
 
-</div>
+![QuotaRail preview with deterministic demo usage](docs/quotarail-preview.png)
 
-## Why
+## What it shows / 显示内容
 
-You're paying for a Max plan, or juggling Claude Code + Codex CLI on the same machine, and you keep finding out you're rate-limited *after* you hit send. Throttle puts the real numbers where you already look — the menu bar — and keeps them there.
+- Codex reads recent local `rate_limits` events only. Prompt and response text are not displayed or saved.
+- Claude uses the existing Claude Code login and its account usage endpoint. It does not estimate a percentage when the endpoint is unavailable.
+- Grok reuses the existing Grok Build CLI login to read its billing usage. It does not import browser cookies or persist the OAuth token.
+- Cursor reads Cursor.app's local login database in read-only mode. Cursor Grok Bot weekly usage is the primary ring; Cursor monthly included usage is secondary detail.
+- The Settings window controls rail size, icon size, idle scale, hover scale, always-visible mode, and which providers appear. At least one provider remains visible.
 
-- **Real, not estimated.** Claude's numbers come straight from Anthropic's own account API — the same one `/usage` uses — including your actual plan (`Max 20x`, `Pro`, etc). Codex's numbers come straight from OpenAI's API. Nothing is scraped or guessed unless you're signed out, and even then it's clearly labeled as an estimate.
-- **Two surfaces, one source of truth.** A menu bar icon that shows your session % right in the bar, and a small pill docked to the edge of your screen for an always-visible glance. Switching tools in one instantly updates the other — no lag, no re-opening.
-- **Get warned before you hit the wall.** An optional notification fires the moment any window crosses 90% used.
-- **Actually looks like something you'd want open.** Real Claude/OpenAI/Gemini marks, status-colored rings (green → amber → red), no other app's UI kit bolted on.
+All provider endpoints and local schemas can change. If QuotaRail cannot verify a real value, it shows an unavailable state rather than inventing a percentage.
 
-## Install
+所有供应商的接口与本地数据格式都可能变化。拿不到可信数据时，QuotaRail 会显示不可用，不会用猜测的百分比顶上。
 
-One command, works on Apple Silicon and Intel — from this folder:
+## Build and check / 构建与检查
+
+Requirements: macOS 13+, Swift 5.9+, and Apple Command Line Tools.
+
+```bash
+./test.sh          # compiles the app target, then runs core fixtures
+./build-app.sh     # creates and ad-hoc signs dist/QuotaRail.app
+./visual-check.sh  # rebuilds current source, then checks preview geometry/motion
+```
+
+`visual-check.sh` does not move the macOS system pointer. It validates the app's deterministic preview path, fixed rail/overlay geometry, and internal exit choreography. It is not a substitute for manually checking real `onContinuousHover` behaviour on the target Mac.
+
+The repository does not ship a system-pointer injection driver. UI checks use app-internal preview states and read-only window metadata, so they do not move the user's macOS cursor.
+
+## Install and upgrade / 安装与升级
 
 ```bash
 ./install.sh
 ```
 
-That builds a universal binary, drops `Throttle.app` into `/Applications`, and launches it. No Xcode project to open, no signing certificate to buy — just the free Xcode Command Line Tools (`xcode-select --install` if you don't have them).
+The installer targets `/Applications/QuotaRail.app`, not a second copy in `~/Applications`. It builds first, copies to an `/Applications` staging directory, validates the staged bundle and signature, stops only the exact old QuotaRail process, moves the old app to `~/.Trash`, installs the staged app, then reads back the installed version and running path. Existing QuotaRail settings remain in macOS preferences and are not reset.
 
-Look for the gauge icon in your menu bar and the pill on the right edge of your screen. Open either one, tap the gear, and flip on **Launch at login** so it's just always there from now on.
+Write permission for `/Applications` is required. The app is ad-hoc signed and **not notarized**; on a new Mac, macOS may require right-click → Open. The installer prints the backup path so the prior app can be restored from Trash.
 
-<details>
-<summary>Prefer to build it yourself?</summary>
+## Privacy and limits / 隐私与边界
 
-```bash
-./build-app.sh          # universal release build → Throttle.app in this folder
-open Throttle.app        # try it without installing anywhere
-```
+- No telemetry and no QuotaRail server.
+- No Codex or Claude hooks are installed.
+- Tokens and session data are used in memory for a refresh and are not written to QuotaRail preferences.
+- Cursor and Grok integration requires the corresponding locally installed and signed-in app/CLI. Without it, live usage cannot be verified.
+- Automated checks use fixtures and preview data, not a real Keychain or real provider account.
 
-Or for local iteration:
+## Release artifact / 发布产物
 
-```bash
-swift build
-.build/debug/Throttle    # runs in place, menu bar only, no Dock icon
-```
-</details>
+`./build-app.sh` produces `dist/QuotaRail.app`. The bundle contains the executable, provider artwork bundle, `AppIcon.icns`, `LICENSE.txt`, and `THIRD_PARTY_NOTICES.md`; it is verified with ad-hoc code signing. For a public release, distribute that `.app` in an archive together with its version and checksum, and describe the build as ad-hoc signed/not notarized unless a separate Developer ID signing and notarization step has actually been completed.
 
-## What it shows
+## License and attribution / 许可
 
-| | Session window | Weekly window | Plan | Source |
-|---|---|---|---|---|
-| **Claude** | ✅ live | ✅ live | ✅ (`Max 20x`, `Pro`, …) | Anthropic's account API |
-| **Codex** | ✅ live | ⚠️ when OpenAI exposes it for your plan | ✅ | OpenAI's API, via Codex CLI's local logs |
-| **Gemini** | — | — | — | see [why below](#gemini) |
-
-Rings and bars are colored by how close you are to the limit — green under 50%, amber under 80%, red above — not by which tool it is, so a glance tells you what actually needs attention.
-
-## Features
-
-- 🟢 **Live usage rings** for Claude and Codex, in a floating pill and a detail panel
-- 🔔 **Threshold notifications** — get pinged once a window crosses 90%, not after
-- 🚀 **Launch at login**, toggled in-app (no manual Login Items fiddling)
-- 🧲 **Draggable pill**, position remembered between launches
-- 🖥️ **Universal binary** — one build, runs native on Apple Silicon and Intel
-- 🔒 **Local-first** — talks only to Anthropic's and OpenAI's own APIs with credentials already on your machine; nothing else sees your data
-
-## How the numbers work
-
-- **Claude** — calls `api.anthropic.com/api/oauth/usage`, the same endpoint Claude Code's own `/usage` and `/status` commands use, authenticated with the OAuth token Claude Code already saved when you ran `claude login` (read from `~/.claude/.credentials.json`, or the macOS Keychain item `Claude Code-credentials` on newer installs). If you're signed out, it falls back to a cost-weighted estimate from local session logs (`~/.claude/projects/**/*.jsonl`), using real per-model $/token pricing compared against a budget you set in Settings — clearly labeled as an estimate, and it's allowed to show over 100% (in red) instead of silently capping.
-- **Codex** — reads the most recently modified `~/.codex/sessions/**/rollout-*.jsonl` and takes the real `rate_limits.primary.used_percent` (and `resets_at`) that OpenAI's API already returns into Codex CLI's own logs. No estimation.
-- <a name="gemini"></a>**Gemini** — Google shut down Gemini CLI's usage-quota API for individual Google accounts in June 2026 (Workspace/Enterprise accounts are unaffected). Since there's nothing honest to show for most people right now, this stays off rather than faking a number. If that changes, or if you're on a Workspace/Enterprise account and want it wired up, see `GeminiUsageEngine.swift`.
-
-Brand marks (`Sources/Throttle/Resources/Brand/*.png`) are the real Claude/OpenAI/Gemini glyphs, sourced from [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) (MIT licensed) — an icon set built specifically for representing AI providers in third-party UI like this.
-
-## Project layout
-
-```
-Sources/Throttle/
-  main.swift                 NSStatusItem + tinted menu bar title
-  LaunchAtLogin.swift         SMAppService wrapper
-  UsageNotifier.swift         90%-threshold local notifications
-  SelectionModel.swift        shared "which tool is selected" state (pill ↔ panel)
-  DetailPanelWindow.swift     custom NSPanel (not NSPopover — see source comments for why)
-  FloatingPillWindow.swift    draggable always-on-top NSPanel on the screen edge
-  UsageStore.swift            polls the engines every 60s, publishes to both UIs
-  Engine/
-    ClaudeOAuthEngine.swift    real usage + plan from Anthropic's account API
-    ClaudeUsageEngine.swift    fallback: cost-weighted estimate from local logs
-    CodexUsageEngine.swift     real rate-limit % from OpenAI's API via local logs
-    GeminiUsageEngine.swift    stub — see "Gemini" above
-  UI/
-    ContentView.swift          detail panel: tab row + session/weekly bars
-    SettingsView.swift          login/notification toggles + budget calibration
-    FloatingPillView.swift      compact ring strip for the pill
-    RingView.swift              status-colored ring + StatusColor helper
-    BrandMark.swift             loads the real provider marks
-    BarRow.swift
-  Resources/Brand/            claude.png / openai.png / gemini.png
-build-app.sh                 universal (arm64 + x86_64) release build, ad-hoc signed
-install.sh                   build + install to /Applications + launch
-```
-
-## Privacy
-
-Throttle reads local files Claude Code, Codex CLI, and (in future) Gemini CLI already wrote to your disk, and makes requests only to `api.anthropic.com` and OpenAI's API using tokens those tools already stored. It doesn't run its own server, doesn't phone home, and doesn't share anything with a third party. It's not affiliated with Anthropic, OpenAI, or Google.
-
-## License
-
-MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, OpenAI, or Google; provider names and marks belong to their respective owners.
+QuotaRail is based on the MIT-licensed [Throttle](https://github.com/momenbuilds/throttle). The retained app icon and provider artwork are covered by the notices in [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Provider names and marks remain trademarks of their respective owners.

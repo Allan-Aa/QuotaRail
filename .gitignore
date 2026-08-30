@@ -2,4 +2,5 @@
 .DS_Store
 *.xcuserstate
 DerivedData/
-Throttle.app/
+dist/
+.swiftpm/

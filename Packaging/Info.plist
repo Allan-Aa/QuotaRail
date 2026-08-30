@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>QuotaRail</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.allan.quotarail</string>
+  <key>CFBundleName</key>
+  <string>QuotaRail</string>
+  <key>CFBundleDisplayName</key>
+  <string>QuotaRail</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleShortVersionString</key>
+	<string>0.9.1</string>
+  <key>CFBundleVersion</key>
+	<string>14</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>QuotaRail contributors. Based on MIT-licensed Throttle.</string>
+</dict>
+</plist>
