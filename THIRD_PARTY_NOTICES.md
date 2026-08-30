@@ -1,6 +1,12 @@
 # Third-party notices
 
-QuotaRail is based on the MIT-licensed project [Throttle](https://github.com/momenbuilds/throttle). The original copyright and MIT license are retained in `LICENSE` and in the packaged application.
+QuotaRail is based on the MIT-licensed project [Throttle](https://github.com/momenbuilds/throttle), Copyright (c) 2026 Claude Bar contributors. Its MIT license is reproduced below and included in the packaged application:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 The packaged `AppIcon.icns` is retained from the MIT-licensed Throttle source. It is distributed under the same retained MIT notice; provider names and marks remain the property of their respective owners.
 
