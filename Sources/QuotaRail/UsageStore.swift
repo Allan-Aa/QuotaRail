@@ -1,9 +1,9 @@
 import Combine
 import Foundation
+import QuotaRailCore
 
 final class UsageStore: ObservableObject {
     @Published private(set) var items: [ToolUsage] = []
-    @Published private(set) var lastUpdated: Date?
     @Published private(set) var isRefreshing = false
 
     private let previewMode: Bool
@@ -47,8 +47,14 @@ final class UsageStore: ObservableObject {
         isRefreshing = true
 
         if previewMode {
-            items = Self.previewItems
-            lastUpdated = Date()
+            let now = Date()
+            let state = ProviderRefreshState.finish(
+                succeeded: true,
+                error: nil,
+                previous: .begin(previous: nil, at: now),
+                at: now
+            )
+            items = Self.previewItems.map { $0.with(refreshState: state) }
             isRefreshing = false
             return
         }
@@ -56,7 +62,7 @@ final class UsageStore: ObservableObject {
         let refreshID = UUID()
         activeRefreshID = refreshID
         completedProviders = 0
-        ensureStableProviderOrder()
+        ensureStableProviderOrder(at: Date())
 
         for tool in ToolUsage.Tool.allCases {
             providerQueue.async { [weak self] in
@@ -70,9 +76,22 @@ final class UsageStore: ObservableObject {
 
     private func receive(_ item: ToolUsage, for tool: ToolUsage.Tool, refreshID: UUID) {
         guard activeRefreshID == refreshID else { return }
-        replace(item, for: tool)
+        let existing = items.first { $0.tool == tool }
+        let now = Date()
+        let previous = ProviderRefreshValue(
+            display: existing ?? Self.loadingItem(for: tool),
+            state: existing?.refreshState
+                ?? ProviderRefreshState.begin(previous: nil, at: now)
+        )
+        let resolution = ProviderRefreshValue.finish(
+            incoming: item,
+            succeeded: item.available,
+            error: item.note,
+            previous: previous,
+            at: now
+        )
+        replace(resolution.display.with(refreshState: resolution.state), for: tool)
         completedProviders += 1
-        lastUpdated = Date()
 
         guard completedProviders == ToolUsage.Tool.allCases.count else { return }
         activeRefreshID = nil
@@ -84,9 +103,19 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func ensureStableProviderOrder() {
+    private func ensureStableProviderOrder(at date: Date) {
         let existing = Dictionary(uniqueKeysWithValues: items.map { ($0.tool, $0) })
-        items = ToolUsage.Tool.allCases.map { existing[$0] ?? Self.loadingItem(for: $0) }
+        items = ToolUsage.Tool.allCases.map { tool in
+            let existingItem = existing[tool]
+            let resolution = ProviderRefreshValue.begin(
+                previous: existingItem.map {
+                    ProviderRefreshValue(display: $0, state: $0.refreshState)
+                },
+                loadingValue: Self.loadingItem(for: tool),
+                at: date
+            )
+            return resolution.display.with(refreshState: resolution.state)
+        }
     }
 
     private func replace(_ item: ToolUsage, for tool: ToolUsage.Tool) {

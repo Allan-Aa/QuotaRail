@@ -53,6 +53,20 @@ final class RailWindowController {
             backing: .buffered,
             defer: false
         )
+        state.setPointerInsideRailResolver { [weak panel, weak preferences] in
+            guard let panel, let preferences else { return false }
+            let layout = RailLayout(
+                trackScale: preferences.trackScale,
+                providerCount: preferences.visibleProviderIDs.count
+            )
+            let interactiveRect = NSRect(
+                x: panel.frame.maxX - layout.interactiveWidth,
+                y: panel.frame.minY,
+                width: layout.interactiveWidth,
+                height: panel.frame.height
+            )
+            return interactiveRect.contains(NSEvent.mouseLocation)
+        }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -197,15 +211,21 @@ final class RailWindowController {
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.state.isCollapsing else { return }
             self.overlayPanel.ignoresMouseEvents = true
+            self.overlayPanel.alphaValue = 0
             self.overlayPanel.orderOut(nil)
-            self.updateFrame()
+            self.updateFrame(animated: false)
+            self.state.finishCollapse()
             self.collapseFrameWorkItem = nil
         }
         collapseFrameWorkItem = work
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + RailState.overlayDismissDuration,
-            execute: work
+        let delay = RailState.collapseVisualDelay(
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
+        if delay == 0 {
+            DispatchQueue.main.async(execute: work)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
     }
 
     private func collapseIfClickWasOutside() {
@@ -284,6 +304,7 @@ final class RailWindowController {
               case .detail(let tool) = state.mode,
               let screen = targetScreen() else {
             overlayPanel.ignoresMouseEvents = true
+            overlayPanel.alphaValue = 0
             overlayPanel.orderOut(nil)
             return
         }
@@ -372,7 +393,7 @@ final class RailWindowController {
 
     private func cardHeight(for item: ToolUsage?) -> CGFloat {
         guard let item, item.available else {
-            return item?.actionURL == nil ? 54 : 62
+            return 62
         }
         return item.weeklyPercent == nil ? 64 : 94
     }

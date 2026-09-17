@@ -81,9 +81,13 @@ measure_exit() {
   wait "$app_process_id" 2>/dev/null || true
 
   local trigger_time
-  trigger_time=$(awk '/^QR_EXIT_BEGIN / { print $2; exit }' "$marker_file")
+  if [[ "$always_visible" == "1" ]]; then
+    trigger_time=$(awk '/^QR_EXIT_BEGIN / { print $2; exit }' "$marker_file")
+  else
+    trigger_time=$(awk '/^QR_COLLAPSE_BEGIN / { print $2; exit }' "$marker_file")
+  fi
   if [[ -z "$trigger_time" ]]; then
-    echo "FAIL $label missing exit trigger marker"
+    echo "FAIL $label missing collapse trigger marker"
     rm -f "$marker_file" "$samples_file" "$signal_path"
     rmdir "$signal_directory"
     return 1
@@ -97,10 +101,13 @@ measure_exit() {
       if ($4 == 104 && $5 == 28) overlay_seen++
     }
     $1 >= trigger {
-      if (overlay_hidden == "" && $4 == 0 && $5 == 0) {
+      if (overlay_hidden == "" && ($4 == 0 && $5 == 0 || $7 == 0)) {
         overlay_hidden = ($1 - trigger) * 1000
       }
       if (persistent == 1 && ($2 != 72 || $3 != 200)) invalid_after++
+      if (persistent == 0 && $2 != 0 && $3 != 0 \
+          && !($2 == 72 && $3 == 200) \
+          && !($2 == 8 && $3 == 28)) intermediate_rail++
       if (persistent == 0 && final_rail == "" && $2 == 8 && $3 == 28) {
         final_rail = ($1 - trigger) * 1000
       }
@@ -108,27 +115,31 @@ measure_exit() {
     END {
       if (overlay_hidden == "") overlay_hidden = -1
       if (final_rail == "") final_rail = persistent == 1 ? 0 : -1
-      printf "%d %d %d %d %.1f %.1f", stable_rail + 0, overlay_seen + 0,
-        invalid_before + 0, invalid_after + 0, overlay_hidden, final_rail
+      printf "%d %d %d %d %d %.1f %.1f", stable_rail + 0, overlay_seen + 0,
+        invalid_before + 0, invalid_after + 0, intermediate_rail + 0, overlay_hidden, final_rail
     }
   ' "$samples_file")
 
   rm -f "$marker_file" "$samples_file" "$signal_path"
   rmdir "$signal_directory"
 
-  local stable_rail overlay_seen invalid_before invalid_after overlay_hidden_ms final_rail_ms
-  read -r stable_rail overlay_seen invalid_before invalid_after overlay_hidden_ms final_rail_ms <<< "$measurements"
+  local stable_rail overlay_seen invalid_before invalid_after intermediate_rail overlay_hidden_ms final_rail_ms
+  read -r stable_rail overlay_seen invalid_before invalid_after intermediate_rail overlay_hidden_ms final_rail_ms <<< "$measurements"
   if (( stable_rail < 2 || overlay_seen < 2 || invalid_before != 0 || invalid_after != 0 )); then
     echo "FAIL $label rail=$stable_rail overlay=$overlay_seen invalid-before=$invalid_before invalid-after=$invalid_after"
     return 1
   fi
-  if ! awk -v value="$overlay_hidden_ms" 'BEGIN { exit !(value >= 0 && value <= 500) }'; then
-    echo "FAIL $label overlay-hidden=${overlay_hidden_ms}ms limit=500ms"
+  if (( intermediate_rail != 0 )); then
+    echo "FAIL $label intermediate-rail-frames=$intermediate_rail"
+    return 1
+  fi
+  if ! awk -v value="$overlay_hidden_ms" 'BEGIN { exit !(value >= 0 && value <= 150) }'; then
+    echo "FAIL $label overlay-hidden=${overlay_hidden_ms}ms limit=150ms"
     return 1
   fi
   if [[ "$always_visible" == "0" ]] && ! awk -v value="$final_rail_ms" \
-      'BEGIN { exit !(value >= 0 && value <= 750) }'; then
-    echo "FAIL $label collapsed=${final_rail_ms}ms limit=750ms"
+      'BEGIN { exit !(value >= 0 && value <= 220) }'; then
+    echo "FAIL $label collapsed=${final_rail_ms}ms limit=220ms"
     return 1
   fi
 

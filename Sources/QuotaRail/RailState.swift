@@ -4,7 +4,12 @@ final class RailState: ObservableObject {
     static let overlayDismissDuration: TimeInterval = 0.10
     static let frameAnimationDuration: TimeInterval = 0.22
     static let hoverExitDelay: TimeInterval = 0.06
-    static let collapseSequenceDuration = overlayDismissDuration + frameAnimationDuration
+    static let hoverHandoffTimeout: TimeInterval = 0.20
+    static let collapseSequenceDuration = overlayDismissDuration
+
+    static func collapseVisualDelay(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0 : overlayDismissDuration
+    }
 
     enum Mode: Equatable {
         case collapsed
@@ -24,21 +29,25 @@ final class RailState: ObservableObject {
 
     private var pointerInside = false
     private var tabHovered = false
+    private var awaitingRailHoverHandoff = false
     private var revealWorkItem: DispatchWorkItem?
     private var collapseWorkItem: DispatchWorkItem?
-    private var collapseFinalizeWorkItem: DispatchWorkItem?
+    private var hoverHandoffWorkItem: DispatchWorkItem?
+    private var isPointerInsideRail: () -> Bool
 
     init(
         mode: Mode = .collapsed,
         hoverEnabled: Bool = true,
         initiallyPinned: Bool? = nil,
         initialHoverY: CGFloat? = nil,
-        alwaysVisible: Bool = false
+        alwaysVisible: Bool = false,
+        isPointerInsideRail: @escaping () -> Bool = { false }
     ) {
         self.mode = mode
         self.hoverEnabled = hoverEnabled
         self.hoverY = initialHoverY
         self.alwaysVisible = alwaysVisible
+        self.isPointerInsideRail = isPointerInsideRail
         if case .detail(let tool) = mode {
             self.hoveredTool = tool
             self.isPinned = initiallyPinned ?? true
@@ -48,10 +57,26 @@ final class RailState: ObservableObject {
         }
     }
 
+    func setPointerInsideRailResolver(_ resolver: @escaping () -> Bool) {
+        isPointerInsideRail = resolver
+    }
+
+    func finishCollapse() {
+        guard isCollapsing else { return }
+        mode = .collapsed
+        isPinned = false
+        hoveredTool = nil
+        hoverY = nil
+        pointerInside = false
+        tabHovered = false
+        cancelHoverHandoff()
+        isCollapsing = false
+    }
+
     deinit {
         revealWorkItem?.cancel()
         collapseWorkItem?.cancel()
-        collapseFinalizeWorkItem?.cancel()
+        hoverHandoffWorkItem?.cancel()
     }
 
     func toggleRail() {
@@ -91,8 +116,11 @@ final class RailState: ObservableObject {
     func setAlwaysVisible(_ enabled: Bool) {
         guard alwaysVisible != enabled else { return }
         alwaysVisible = enabled
-        if enabled, mode == .collapsed || isCollapsing {
-            showRail()
+        if enabled {
+            cancelHoverHandoff()
+            if mode == .collapsed || isCollapsing {
+                showRail()
+            }
         }
     }
 
@@ -113,6 +141,12 @@ final class RailState: ObservableObject {
         tabHovered = inside
 
         if inside {
+            if mode == .collapsed {
+                pointerInside = false
+            }
+            awaitingRailHoverHandoff = false
+            hoverHandoffWorkItem?.cancel()
+            hoverHandoffWorkItem = nil
             cancelCollapseTransition()
             collapseWorkItem?.cancel()
             revealWorkItem?.cancel()
@@ -125,13 +159,19 @@ final class RailState: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
         } else {
             revealWorkItem?.cancel()
-            scheduleCollapse()
+            guard !pointerInside else { return }
+            if mode != .collapsed, !isPinned, !alwaysVisible {
+                beginHoverHandoff()
+            } else {
+                scheduleCollapse()
+            }
         }
     }
 
     func continuousHoverMoved(y: CGFloat, nearest tool: ToolUsage.Tool) {
         guard hoverEnabled, !isPinned else { return }
         cancelCollapseTransition()
+        cancelHoverHandoff()
         pointerInside = true
         hoverY = y
         collapseWorkItem?.cancel()
@@ -149,6 +189,7 @@ final class RailState: ObservableObject {
 
     func continuousHoverEnded() {
         guard hoverEnabled, !isPinned else { return }
+        guard !awaitingRailHoverHandoff else { return }
         pointerInside = false
         scheduleCollapse()
     }
@@ -158,9 +199,16 @@ final class RailState: ObservableObject {
         collapseWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self,
+                  self.mode != .collapsed,
+                  !self.isCollapsing,
                   !self.pointerInside,
                   !self.tabHovered,
                   !self.isPinned else { return }
+            if self.isPointerInsideRail() {
+                self.pointerInside = true
+                self.cancelHoverHandoff()
+                return
+            }
             if self.alwaysVisible {
                 self.returnToRail()
             } else {
@@ -174,19 +222,44 @@ final class RailState: ObservableObject {
         )
     }
 
+    private func beginHoverHandoff() {
+        awaitingRailHoverHandoff = true
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+        hoverHandoffWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.awaitingRailHoverHandoff,
+                  !self.pointerInside,
+                  !self.tabHovered,
+                  !self.isPinned else { return }
+            self.awaitingRailHoverHandoff = false
+            self.hoverHandoffWorkItem = nil
+            self.scheduleCollapse()
+        }
+        hoverHandoffWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.hoverHandoffTimeout,
+            execute: work
+        )
+    }
+
     private func cancelPendingWork() {
         revealWorkItem?.cancel()
         collapseWorkItem?.cancel()
-        collapseFinalizeWorkItem?.cancel()
+        cancelHoverHandoff()
         revealWorkItem = nil
         collapseWorkItem = nil
-        collapseFinalizeWorkItem = nil
+    }
+
+    private func cancelHoverHandoff() {
+        awaitingRailHoverHandoff = false
+        hoverHandoffWorkItem?.cancel()
+        hoverHandoffWorkItem = nil
     }
 
     private func cancelCollapseTransition() {
         guard isCollapsing else { return }
-        collapseFinalizeWorkItem?.cancel()
-        collapseFinalizeWorkItem = nil
         isCollapsing = false
     }
 
@@ -200,24 +273,14 @@ final class RailState: ObservableObject {
         collapseWorkItem?.cancel()
         revealWorkItem = nil
         collapseWorkItem = nil
+        cancelHoverHandoff()
         pointerInside = false
         tabHovered = false
         isCollapsing = true
-
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, self.isCollapsing else { return }
-            self.mode = .collapsed
-            self.isPinned = false
-            self.hoveredTool = nil
-            self.hoverY = nil
-            self.isCollapsing = false
-            self.collapseFinalizeWorkItem = nil
+        if ProcessInfo.processInfo.environment["QUOTARAIL_PREVIEW"] == "1" {
+            let uptime = ProcessInfo.processInfo.systemUptime
+            FileHandle.standardOutput.write(Data("QR_COLLAPSE_BEGIN \(uptime)\n".utf8))
         }
-        collapseFinalizeWorkItem = work
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.collapseSequenceDuration,
-            execute: work
-        )
     }
 
     private func returnToRail() {
@@ -225,6 +288,7 @@ final class RailState: ObservableObject {
         isCollapsing = false
         pointerInside = false
         tabHovered = false
+        cancelHoverHandoff()
         isPinned = false
         hoveredTool = nil
         hoverY = nil

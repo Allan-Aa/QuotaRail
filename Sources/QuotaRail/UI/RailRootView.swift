@@ -91,6 +91,11 @@ struct RailRootView: View {
             reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.84),
             value: state.isPinned
         )
+        .opacity(state.isCollapsing ? 0 : 1)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: RailState.overlayDismissDuration),
+            value: state.isCollapsing
+        )
         .accessibilityElement(children: .contain)
     }
 
@@ -109,7 +114,7 @@ struct RailRootView: View {
         )
         .contentShape(Rectangle())
         .onContinuousHover { phase in
-            guard state.mode != .collapsed, !state.isCollapsing else { return }
+            guard state.mode != .collapsed else { return }
             handleContinuousHover(phase)
         }
         .onAppear { traceHover("rail-appear") }
@@ -325,7 +330,9 @@ private struct ProviderRailButton: View {
                     .monospacedDigit()
                     .tracking(-0.1)
                     .foregroundStyle(
-                        item?.available == true
+                        isShowingCachedValue
+                            ? Color.orange
+                            : item?.available == true
                             ? RailTheme.text.opacity(0.88)
                             : RailTheme.textMuted
                     )
@@ -343,7 +350,7 @@ private struct ProviderRailButton: View {
         .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.72), value: isSelected)
         .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.68), value: isHovered)
         .accessibilityLabel(tool.rawValue)
-        .accessibilityValue(percentLabel)
+        .accessibilityValue(accessibilityValue)
     }
 
     private var statusColor: Color {
@@ -356,6 +363,16 @@ private struct ProviderRailButton: View {
     private var percentLabel: String {
         guard item?.available == true, let percent = item?.sessionPercent else { return "—" }
         return "\(Int((percent * 100).rounded()))%"
+    }
+
+    private var isShowingCachedValue: Bool {
+        item?.refreshState.isShowingCachedValue == true
+    }
+
+    private var accessibilityValue: String {
+        guard isShowingCachedValue else { return percentLabel }
+        let status = item?.refreshState.status == .stale ? "更新失败" : "正在刷新"
+        return "\(percentLabel)，上次数据，\(status)"
     }
 }
 
@@ -372,8 +389,16 @@ private struct UsageHoverLabel: View {
             Spacer(minLength: 2)
             Text(percentLabel)
                 .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(RailTheme.textSecondary)
+                .foregroundStyle(isShowingCachedValue ? Color.orange : RailTheme.textSecondary)
                 .lineLimit(1)
+                .overlay(alignment: .topTrailing) {
+                    if isShowingCachedValue {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 4, height: 4)
+                            .offset(x: 2, y: -2)
+                    }
+                }
         }
         .foregroundStyle(RailTheme.text)
         .padding(.horizontal, 9)
@@ -387,13 +412,23 @@ private struct UsageHoverLabel: View {
         )
         .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(tool.rawValue) hover label, \(percentLabel)")
+        .accessibilityLabel("\(tool.rawValue) hover label, \(accessibilityValue)")
         .accessibilityIdentifier("quota-label-\(tool.rawValue.lowercased())")
     }
 
     private var percentLabel: String {
         guard item?.available == true, let percent = item?.sessionPercent else { return "—" }
         return "\(Int((percent * 100).rounded()))%"
+    }
+
+    private var isShowingCachedValue: Bool {
+        item?.refreshState.isShowingCachedValue == true
+    }
+
+    private var accessibilityValue: String {
+        guard isShowingCachedValue else { return percentLabel }
+        let status = item?.refreshState.status == .stale ? "更新失败" : "正在刷新"
+        return "\(percentLabel)，上次数据，\(status)"
     }
 }
 
@@ -414,6 +449,9 @@ private struct UsageCard: View {
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(RailTheme.text)
                     Spacer(minLength: 0)
+                    refreshStatus
+                        .font(.system(size: 7.2, weight: .medium))
+                        .lineLimit(1)
                 }
 
                 if let item, item.available {
@@ -459,9 +497,11 @@ private struct UsageCard: View {
     @ViewBuilder
     private var unavailableContent: some View {
         HStack(spacing: 6) {
-            Text("Usage unavailable")
-                .font(.system(size: 9))
+            Text(unavailableReason)
+                .font(.system(size: 8.5))
                 .foregroundStyle(RailTheme.textSecondary)
+                .lineLimit(2)
+                .help(unavailableReason)
             Spacer(minLength: 0)
             if let url = item?.actionURL {
                 Button {
@@ -477,6 +517,41 @@ private struct UsageCard: View {
                 .buttonStyle(RailPressButtonStyle())
             }
         }
+    }
+
+    @ViewBuilder
+    private var refreshStatus: some View {
+        if let item {
+            switch item.refreshState.status {
+            case .refreshing:
+                Text("刷新中")
+                    .foregroundStyle(RailTheme.textMuted)
+            case .fresh:
+                if let date = item.refreshState.lastSuccess {
+                    Text(date, style: .time)
+                        .foregroundStyle(RailTheme.textMuted)
+                } else {
+                    Text("已更新")
+                        .foregroundStyle(RailTheme.textMuted)
+                }
+            case .stale:
+                HStack(spacing: 2) {
+                    Text("失败")
+                    if let date = item.refreshState.lastSuccess {
+                        Text(date, style: .time)
+                    }
+                }
+                .foregroundStyle(.orange)
+                .help(item.refreshState.error ?? "刷新失败")
+            case .unavailable:
+                Text("不可用")
+                    .foregroundStyle(RailTheme.textMuted)
+            }
+        }
+    }
+
+    private var unavailableReason: String {
+        item?.refreshState.error ?? item?.note ?? "Usage unavailable"
     }
 
     private var primaryUsageLabel: String {

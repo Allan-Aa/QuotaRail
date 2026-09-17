@@ -58,6 +58,7 @@ if CommandLine.arguments.contains("--live-codex") {
 }
 
 var runner = CheckRunner()
+runProviderRefreshStateChecks(&runner)
 
 if let snapshot = CodexRateLimitReader.snapshot(fromJSONLine: codexLine(
     primary: 25,
@@ -365,7 +366,7 @@ do {
     let compactLayout = RailLayout(trackScale: 0.75, providerCount: 3)
     runner.expect(
         compactLayout.interactiveWidth == compactLayout.railWidth,
-        "Rail hover hit width matches the resting panel"
+        "Rail hover hit width matches the visible rail strip"
     )
     runner.expect(
         compactLayout.glassBackgroundWidth > compactLayout.interactiveWidth,
